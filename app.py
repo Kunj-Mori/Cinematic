@@ -382,38 +382,73 @@ with tab3:
     
     # If webcam is on, capture and process frames
     if st.session_state.webcam_on:
-        # Initialize webcam
-        cap = cv2.VideoCapture(0)
+        # Try different camera backends and indices
+        camera_found = False
+        backends = [cv2.CAP_ANY]
+        if os.name == 'nt':  # Windows
+            backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
+        else:  # Linux/Mac
+            backends = [cv2.CAP_V4L2, cv2.CAP_ANY]
         
-        # Check if webcam is opened successfully
-        if not cap.isOpened():
-            st.error("Could not open webcam. Please check your camera connection.")
+        # Try different camera indices with different backends
+        for backend in backends:
+            for camera_index in range(3):  # Try indices 0, 1, 2
+                try:
+                    cap = cv2.VideoCapture(camera_index, backend)
+                    if cap.isOpened():
+                        # Test if we can actually read from the camera
+                        ret, test_frame = cap.read()
+                        if ret and test_frame is not None:
+                            camera_found = True
+                            st.success(f"Camera found! Using index {camera_index} with backend {backend}")
+                            break
+                        else:
+                            cap.release()
+                except Exception as e:
+                    continue
+            if camera_found:
+                break
+        
+        if not camera_found:
+            st.error("Could not open webcam. Please check:")
+            st.write("- Camera is properly connected")
+            st.write("- Camera is not in use by another application")
+            st.write("- Camera permissions are granted")
+            st.write("- Try running: sudo modprobe v4l2loopback (for Linux)")
+            
+            # Print OpenCV build information for debugging
+            st.write("OpenCV Build Information:")
+            build_info = cv2.getBuildInformation()
+            st.code(build_info)
         else:
             # Process frames in real-time
-            while st.session_state.webcam_on:
-                ret, frame = cap.read()
-                
-                if not ret:
-                    st.error("Failed to capture frame from webcam.")
-                    break
-                
-                # Process frame
-                processed_frame = process_frame(frame)
-                
-                # Display side by side
-                combined_frame = np.hstack((frame, processed_frame))
-                
-                # Convert to RGB for display
-                combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
-                
-                # Display frame
-                webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
-                
-                # Add a small delay to reduce CPU usage
-                time.sleep(0.03)
-            
-            # Release webcam when done
-            cap.release()
+            try:
+                while st.session_state.webcam_on:
+                    ret, frame = cap.read()
+                    
+                    if not ret:
+                        st.error("Failed to capture frame from webcam.")
+                        break
+                    
+                    # Process frame
+                    processed_frame = process_frame(frame)
+                    
+                    # Display side by side
+                    combined_frame = np.hstack((frame, processed_frame))
+                    
+                    # Convert to RGB for display
+                    combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
+                    
+                    # Display frame
+                    webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
+                    
+                    # Add a small delay to reduce CPU usage
+                    time.sleep(0.03)
+            except Exception as e:
+                st.error(f"Error during webcam capture: {str(e)}")
+            finally:
+                # Release webcam when done
+                cap.release()
 
 # Footer
 st.markdown("---")
