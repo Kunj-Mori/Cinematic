@@ -416,71 +416,78 @@ with tab2:
 with tab3:
     st.markdown("<h2 class='sub-header'>Webcam Filtering</h2>", unsafe_allow_html=True)
     
-    col1, col2 = st.columns(2)
+    # Check if running on Streamlit Cloud
+    is_cloud = os.getenv('STREAMLIT_RUNTIME_ENV') == 'cloud'
     
-    with col1:
-        if not st.session_state.webcam_on:
-            if st.button("Start Webcam"):
-                st.session_state.webcam_on = True
-                st.rerun()
-    
-    with col2:
+    if is_cloud:
+        st.warning("⚠️ Webcam functionality is not available in cloud deployment. Please run the application locally to use the webcam features.")
+        st.info("💡 You can still use the Image and Video tabs to process your media!")
+    else:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if not st.session_state.webcam_on:
+                if st.button("Start Webcam"):
+                    st.session_state.webcam_on = True
+                    st.rerun()
+        
+        with col2:
+            if st.session_state.webcam_on:
+                if st.button("Stop Webcam"):
+                    st.session_state.webcam_on = False
+                    st.rerun()
+        
+        # Display webcam status
+        st.write(f"Webcam is {'ON' if st.session_state.webcam_on else 'OFF'}")
+        
+        # Webcam frame placeholder
+        webcam_frame = st.empty()
+        
+        # If webcam is on, capture and process frames
         if st.session_state.webcam_on:
-            if st.button("Stop Webcam"):
-                st.session_state.webcam_on = False
-                st.rerun()
-    
-    # Display webcam status
-    st.write(f"Webcam is {'ON' if st.session_state.webcam_on else 'OFF'}")
-    
-    # Webcam frame placeholder
-    webcam_frame = st.empty()
-    
-    # If webcam is on, capture and process frames
-    if st.session_state.webcam_on:
-        try:
-            # Initialize webcam
-            cap = cv2.VideoCapture(0)
-            
-            # Check if webcam is opened successfully
-            if not cap.isOpened():
-                st.error("Could not open webcam. Please check your camera connection.")
-                st.session_state.webcam_on = False
-                st.rerun()
-            else:
-                while st.session_state.webcam_on:
-                    try:
-                        ret, frame = cap.read()
-                        if not ret:
-                            st.error("Failed to capture frame from webcam.")
-                            break
-                        
-                        # Process frame
-                        processed_frame = process_frame(frame)
-                        
-                        # Display side by side
-                        combined_frame = np.hstack((frame, processed_frame))
-                        
-                        # Convert to RGB for display
-                        combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
-                        
-                        # Display frame
-                        webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
-                        
-                        # Add a small delay to reduce CPU usage
-                        time.sleep(0.03)
-                    except Exception as e:
-                        st.error(f"Error processing frame: {str(e)}")
-                        break
-        except Exception as e:
-            st.error(f"Error initializing webcam: {str(e)}")
-        finally:
-            # Release webcam when done
             try:
-                cap.release()
-            except:
-                pass
-            st.session_state.webcam_on = False
+                # Initialize webcam
+                cap = cv2.VideoCapture(0)
+                
+                # Check if webcam is opened successfully
+                if not cap.isOpened():
+                    st.error("Could not open webcam. Please check your camera connection.")
+                    st.session_state.webcam_on = False
+                    st.rerun()
+                else:
+                    while st.session_state.webcam_on:
+                        try:
+                            ret, frame = cap.read()
+                            if not ret:
+                                st.error("Failed to capture frame from webcam.")
+                                break
+                            
+                            # Process frame
+                            processed_frame = process_frame(frame)
+                            
+                            # Display side by side
+                            combined_frame = np.hstack((frame, processed_frame))
+                            
+                            # Convert to RGB for display
+                            combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
+                            
+                            # Display frame
+                            webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
+                            
+                            # Add a small delay to reduce CPU usage
+                            time.sleep(0.03)
+                        except Exception as e:
+                            st.error(f"Error processing frame: {str(e)}")
+                            break
+            except Exception as e:
+                st.error(f"Error initializing webcam: {str(e)}")
+            finally:
+                # Release webcam when done
+                try:
+                    cap.release()
+                except:
+                    pass
+                st.session_state.webcam_on = False
 
 # Footer
 st.markdown("---")
