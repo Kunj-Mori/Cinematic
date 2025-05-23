@@ -368,79 +368,39 @@ with tab2:
             os.unlink(temp_file.name)
 
 with tab3:
-    st.markdown("<h2 class='sub-header'>Live Video Filtering</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='sub-header'>Camera Filtering</h2>", unsafe_allow_html=True)
     
-    # Initialize camera state if not exists
-    if 'camera_on' not in st.session_state:
-        st.session_state.camera_on = False
+    # Create a camera input widget
+    camera_input = st.camera_input("", key="camera")
     
-    # Camera control
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        if st.button("Start Camera" if not st.session_state.camera_on else "Stop Camera"):
-            st.session_state.camera_on = not st.session_state.camera_on
-            st.experimental_rerun()
-    with col2:
-        st.write("Status: " + ("🟢 Camera Active" if st.session_state.camera_on else "🔴 Camera Off"))
-    
-    # Live video feed placeholder
-    video_placeholder = st.empty()
-    
-    if st.session_state.camera_on:
+    # Process the camera input in real-time
+    if camera_input is not None:
         try:
-            # Try to initialize camera with different backends
-            camera = None
-            for backend in [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_V4L2, cv2.CAP_ANY]:
-                try:
-                    camera = cv2.VideoCapture(0, backend)
-                    if camera.isOpened():
-                        # Test read a frame
-                        ret, frame = camera.read()
-                        if ret:
-                            break
-                        else:
-                            camera.release()
-                except:
-                    continue
+            # Convert the image to OpenCV format
+            image = Image.open(camera_input)
+            image_np = np.array(image)
+            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
             
-            if camera is None or not camera.isOpened():
-                st.error("❌ Could not initialize camera. Please check your camera connection.")
-            else:
-                st.success("✅ Camera initialized successfully!")
-                
-                # Set camera properties for better performance
-                camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                camera.set(cv2.CAP_PROP_FPS, 30)
-                camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                
-                # Main video processing loop
-                while st.session_state.camera_on:
-                    ret, frame = camera.read()
-                    if ret:
-                        # Process frame with filters
-                        filtered_frame = process_frame(frame)
-                        
-                        # Convert to RGB for display
-                        display_frame = cv2.cvtColor(filtered_frame, cv2.COLOR_BGR2RGB)
-                        
-                        # Display the filtered frame
-                        video_placeholder.image(display_frame, channels="RGB", use_column_width=True)
-                    else:
-                        st.error("❌ Failed to read frame from camera")
-                        break
-                    
-                    # Small delay to prevent high CPU usage
-                    time.sleep(0.001)
-                
-                # Clean up
-                camera.release()
-        
+            # Apply filters
+            filtered_frame = process_frame(image_bgr)
+            
+            # Convert back to RGB for display
+            filtered_rgb = cv2.cvtColor(filtered_frame, cv2.COLOR_BGR2RGB)
+            
+            # Display the filtered result
+            st.image(filtered_rgb, caption="Filtered View", use_column_width=True)
+            
+            # Add a download button for the filtered image
+            result_bytes = cv2.imencode('.jpg', filtered_frame)[1].tobytes()
+            st.download_button(
+                label="Save Filtered Image",
+                data=result_bytes,
+                file_name="filtered_image.jpg",
+                mime="image/jpeg"
+            )
+            
         except Exception as e:
-            st.error(f"❌ Camera error: {str(e)}")
-            if 'camera' in locals() and camera is not None:
-                camera.release()
-            st.session_state.camera_on = False
+            st.error(f"Error processing image: {str(e)}")
 
 # Footer
 st.markdown("---")
