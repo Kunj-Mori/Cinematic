@@ -368,72 +368,79 @@ with tab2:
             os.unlink(temp_file.name)
 
 with tab3:
-    st.markdown("<h2 class='sub-header'>Webcam Filtering</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='sub-header'>Live Video Filtering</h2>", unsafe_allow_html=True)
     
-    # Toggle webcam
-    if st.button("Toggle Webcam"):
-        st.session_state.webcam_on = not st.session_state.webcam_on
+    # Initialize camera state if not exists
+    if 'camera_on' not in st.session_state:
+        st.session_state.camera_on = False
     
-    # Display webcam status
-    st.write(f"Webcam is {'ON' if st.session_state.webcam_on else 'OFF'}")
+    # Camera control
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("Start Camera" if not st.session_state.camera_on else "Stop Camera"):
+            st.session_state.camera_on = not st.session_state.camera_on
+            st.experimental_rerun()
+    with col2:
+        st.write("Status: " + ("🟢 Camera Active" if st.session_state.camera_on else "🔴 Camera Off"))
     
-    # Webcam frame placeholder
-    webcam_frame = st.empty()
+    # Live video feed placeholder
+    video_placeholder = st.empty()
     
-    # If webcam is on, capture and process frames
-    if st.session_state.webcam_on:
+    if st.session_state.camera_on:
         try:
-            # Initialize webcam with different backends
-            cap = None
-            backends = [cv2.CAP_ANY]
+            # Try to initialize camera with different backends
+            camera = None
+            for backend in [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_V4L2, cv2.CAP_ANY]:
+                try:
+                    camera = cv2.VideoCapture(0, backend)
+                    if camera.isOpened():
+                        # Test read a frame
+                        ret, frame = camera.read()
+                        if ret:
+                            break
+                        else:
+                            camera.release()
+                except:
+                    continue
             
-            if os.name == 'nt':  # Windows
-                backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
-            else:  # Linux/Mac
-                backends = [cv2.CAP_V4L2, cv2.CAP_ANY]
-            
-            # Try different backends
-            for backend in backends:
-                cap = cv2.VideoCapture(0, backend)
-                if cap.isOpened():
-                    ret, test_frame = cap.read()
-                    if ret and test_frame is not None:
-                        break
-                    cap.release()
-            
-            if not cap.isOpened():
-                st.error("Could not open webcam. Please check your camera connection.")
+            if camera is None or not camera.isOpened():
+                st.error("❌ Could not initialize camera. Please check your camera connection.")
             else:
-                # Process frames in real-time
-                while st.session_state.webcam_on:
-                    ret, frame = cap.read()
-                    
-                    if not ret:
-                        st.error("Failed to capture frame from webcam.")
+                st.success("✅ Camera initialized successfully!")
+                
+                # Set camera properties for better performance
+                camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                camera.set(cv2.CAP_PROP_FPS, 30)
+                camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                
+                # Main video processing loop
+                while st.session_state.camera_on:
+                    ret, frame = camera.read()
+                    if ret:
+                        # Process frame with filters
+                        filtered_frame = process_frame(frame)
+                        
+                        # Convert to RGB for display
+                        display_frame = cv2.cvtColor(filtered_frame, cv2.COLOR_BGR2RGB)
+                        
+                        # Display the filtered frame
+                        video_placeholder.image(display_frame, channels="RGB", use_column_width=True)
+                    else:
+                        st.error("❌ Failed to read frame from camera")
                         break
                     
-                    # Process frame
-                    processed_frame = process_frame(frame)
-                    
-                    # Display side by side
-                    combined_frame = np.hstack((frame, processed_frame))
-                    
-                    # Convert to RGB for display
-                    combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
-                    
-                    # Display frame
-                    webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
-                    
-                    # Add a small delay to reduce CPU usage
-                    time.sleep(0.03)
+                    # Small delay to prevent high CPU usage
+                    time.sleep(0.001)
+                
+                # Clean up
+                camera.release()
         
         except Exception as e:
-            st.error(f"Camera error: {str(e)}")
-        
-        finally:
-            # Release webcam when done
-            if 'cap' in locals() and cap is not None:
-                cap.release()
+            st.error(f"❌ Camera error: {str(e)}")
+            if 'camera' in locals() and camera is not None:
+                camera.release()
+            st.session_state.camera_on = False
 
 # Footer
 st.markdown("---")
