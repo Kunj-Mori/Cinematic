@@ -131,7 +131,7 @@ if st.sidebar.button("Apply Preset"):
     st.session_state.tint_b = preset["tint_b"]
     st.session_state.vignette = preset["vignette"]
     st.session_state.grain = preset["grain"]
-    st.experimental_rerun()
+    st.rerun()
 
 # Function to apply vignette effect
 def apply_vignette(image, amount):
