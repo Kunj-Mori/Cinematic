@@ -368,49 +368,56 @@ with tab2:
             os.unlink(temp_file.name)
 
 with tab3:
-    st.markdown("<h2 class='sub-header'>Camera Filtering</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='sub-header'>Live Camera Filters</h2>", unsafe_allow_html=True)
     
-    # Use Streamlit's built-in camera input
-    camera_input = st.camera_input("Take a photo")
+    # Initialize webcam state if not exists
+    if 'webcam_active' not in st.session_state:
+        st.session_state.webcam_active = False
     
-    if camera_input is not None:
+    # Toggle webcam button
+    if st.button("🎥 Toggle Camera" if not st.session_state.webcam_active else "⏹️ Stop Camera"):
+        st.session_state.webcam_active = not st.session_state.webcam_active
+        st.rerun()
+    
+    # Show status
+    st.write(f"Camera is {'ON' if st.session_state.webcam_active else 'OFF'}")
+    
+    if st.session_state.webcam_active:
+        # Create a placeholder for the webcam feed
+        webcam_placeholder = st.empty()
+        
         try:
-            # Read the image from the camera input
-            image = Image.open(camera_input)
+            # Start webcam feed
+            webcam = st.camera_input("", key="webcam")
             
-            # Convert to numpy array for processing
-            image_np = np.array(image)
-            
-            # Convert RGB to BGR for OpenCV processing
-            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
-            
-            # Process the image
-            processed_frame = process_frame(image_bgr)
-            
-            # Display results side by side
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("### Original")
-                st.image(image_np, use_column_width=True)
-            
-            with col2:
-                st.markdown("### Processed")
+            if webcam is not None:
+                # Process the frame
+                image = Image.open(webcam)
+                image_np = np.array(image)
+                image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+                
+                # Apply filters
+                processed_frame = process_frame(image_bgr)
                 processed_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-                st.image(processed_rgb, use_column_width=True)
-            
-            # Add download button
-            processed_bytes = cv2.imencode('.jpg', processed_frame)[1].tobytes()
-            st.download_button(
-                label="Download Processed Photo",
-                data=processed_bytes,
-                file_name="processed_photo.jpg",
-                mime="image/jpeg"
-            )
-            
+                
+                # Display processed frame
+                webcam_placeholder.image(processed_rgb, caption="Live Filter View", use_column_width=True)
+                
+                # Add snapshot button
+                if st.button("📸 Take Snapshot"):
+                    # Save the processed frame
+                    processed_bytes = cv2.imencode('.jpg', processed_frame)[1].tobytes()
+                    st.download_button(
+                        label="💾 Save Snapshot",
+                        data=processed_bytes,
+                        file_name="snapshot.jpg",
+                        mime="image/jpeg"
+                    )
+        
         except Exception as e:
-            st.error(f"Error processing image: {str(e)}")
-            st.info("Please try taking another photo.")
+            st.error("Camera error! Please check your camera connection and permissions.")
+            st.session_state.webcam_active = False
+            st.rerun()
 
 # Footer
 st.markdown("---")
