@@ -428,83 +428,116 @@ with tab2:
 with tab3:
     st.markdown("<h2 class='sub-header'>Webcam Filtering</h2>", unsafe_allow_html=True)
     
-    if st.session_state.is_cloud:
-        st.warning("⚠️ Webcam functionality is not available in cloud deployment.")
-        st.info("💡 Please use the Image or Video tabs instead, or run the application locally to use webcam features.")
-        st.markdown("""
-        ### Why isn't webcam available?
-        The webcam feature requires access to physical camera hardware, which isn't available in cloud deployments.
-        
-        To use the webcam feature:
-        1. Clone the repository locally
-        2. Install the requirements
-        3. Run the app using `streamlit run app.py`
-        """)
+    if not st.session_state.camera_found:
+        st.error("❌ No camera found! Please check your camera connection.")
+        st.info("💡 Make sure your camera is properly connected and not in use by another application.")
     else:
-        try:
-            # Test webcam availability before showing controls
-            test_cap = cv2.VideoCapture(0)
-            if test_cap.isOpened():
-                test_cap.release()
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if not st.session_state.webcam_on:
+                if st.button("Start Webcam"):
+                    st.session_state.webcam_on = True
+                    st.rerun()
+        
+        with col2:
+            if st.session_state.webcam_on:
+                if st.button("Stop Webcam"):
+                    st.session_state.webcam_on = False
+                    st.rerun()
+        
+        # Display webcam status
+        st.write(f"Webcam is {'ON' if st.session_state.webcam_on else 'OFF'}")
+        
+        # Webcam frame placeholder
+        webcam_frame = st.empty()
+        
+        # If webcam is on, capture and process frames
+        if st.session_state.webcam_on:
+            cap = None
+            try:
+                # Initialize camera with detected backend
+                cap = cv2.VideoCapture(st.session_state.camera_index, st.session_state.camera_backend)
                 
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if not st.session_state.webcam_on:
-                        if st.button("Start Webcam"):
-                            st.session_state.webcam_on = True
-                            st.rerun()
-                
-                with col2:
+                if not cap.isOpened():
+                    st.error("Failed to open camera. Please try again.")
+                    st.session_state.webcam_on = False
+                else:
+                    # Set camera properties for better performance
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                    cap.set(cv2.CAP_PROP_FPS, 30)
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    
+                    frame_count = 0
+                    max_frames = 50  # Limit frames before refresh to prevent infinite loop
+                    
+                    while st.session_state.webcam_on and frame_count < max_frames:
+                        ret, frame = cap.read()
+                        if not ret:
+                            st.error("Failed to capture frame from webcam.")
+                            break
+                        
+                        # Process frame
+                        processed_frame = process_frame(frame)
+                        
+                        # Display side by side
+                        combined_frame = np.hstack((frame, processed_frame))
+                        
+                        # Convert to RGB for display
+                        combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
+                        
+                        # Display frame
+                        webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
+                        
+                        frame_count += 1
+                        time.sleep(0.03)  # ~30 FPS
+                    
+                    # Auto-refresh for continuous streaming
                     if st.session_state.webcam_on:
-                        if st.button("Stop Webcam"):
-                            st.session_state.webcam_on = False
-                            st.rerun()
-                
-                # Display webcam status
-                st.write(f"Webcam is {'ON' if st.session_state.webcam_on else 'OFF'}")
-                
-                # Webcam frame placeholder
-                webcam_frame = st.empty()
-                
-                # If webcam is on, capture and process frames
-                if st.session_state.webcam_on:
-                    cap = None
-                    try:
-                        cap = cv2.VideoCapture(0)
-                        while st.session_state.webcam_on:
-                            ret, frame = cap.read()
-                            if not ret:
-                                st.error("Failed to capture frame from webcam.")
-                                break
-                            
-                            # Process frame
-                            processed_frame = process_frame(frame)
-                            
-                            # Display side by side
-                            combined_frame = np.hstack((frame, processed_frame))
-                            
-                            # Convert to RGB for display
-                            combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
-                            
-                            # Display frame
-                            webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
-                            
-                            # Add a small delay to reduce CPU usage
-                            time.sleep(0.03)
-                    except Exception as e:
-                        st.error(f"Error during webcam operation: {str(e)}")
-                    finally:
-                        st.session_state.webcam_on = False
-                        if cap is not None:
-                            cap.release()
-            else:
-                st.error("No webcam detected on this system.")
-                st.info("Please make sure a webcam is connected and properly configured.")
-        except Exception as e:
-            st.error("Failed to initialize webcam system.")
-            st.info("This might be due to missing drivers or hardware issues.")
-            print(f"Webcam initialization error: {str(e)}")  # For debugging
+                        time.sleep(0.1)
+                        st.rerun()
+                        
+            except Exception as e:
+                st.error(f"Camera error: {str(e)}")
+                st.info("Try refreshing the page or check if another app is using the camera.")
+            finally:
+                st.session_state.webcam_on = False
+                if cap is not None:
+                    cap.release()
+        
+        # Add static camera capture option
+        st.write("---")
+        st.write("📸 Or capture a single photo:")
+        camera_file = st.camera_input("Take a picture")
+        
+        if camera_file is not None:
+            # Process the captured image
+            image = Image.open(camera_file)
+            image_np = np.array(image.convert("RGB"))
+            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+            
+            # Process frame
+            result = process_frame(image_bgr)
+            result_rgb = cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
+            
+            # Display results
+            col1, col2 = st.columns(2)
+            with col1:
+                st.header("Original")
+                st.image(image_np)
+            with col2:
+                st.header("With Filter")
+                st.image(result_rgb)
+            
+            # Download button
+            processed_img = cv2.imencode('.jpg', result)[1].tobytes()
+            st.download_button(
+                label="Download Filtered Image",
+                data=processed_img,
+                file_name="filtered_photo.jpg",
+                mime="image/jpeg"
+            )
 
 # Footer
 st.markdown("---")
@@ -521,3 +554,54 @@ st.markdown("""
 - Images: JPG, JPEG, PNG
 - Videos: MP4, AVI, MOV
 """)
+
+# Add this function after imports
+def find_working_camera():
+    """Find the first working camera"""
+    # Try common camera indices with different backends
+    backends_to_try = []
+    
+    if os.name == 'nt':  # Windows
+        backends_to_try = [cv2.CAP_DSHOW, cv2.CAP_MSMF]
+    else:  # Linux/Mac
+        backends_to_try = [cv2.CAP_V4L2, cv2.CAP_ANY]
+    
+    for backend in backends_to_try:
+        for i in range(5):  # Try indices 0-4
+            try:
+                cap = cv2.VideoCapture(i, backend)
+                if cap.isOpened():
+                    ret, frame = cap.read()
+                    if ret and frame is not None:
+                        cap.release()
+                        return i, backend
+                cap.release()
+            except:
+                continue
+    
+    # Fallback - try default method
+    for i in range(5):
+        try:
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    cap.release()
+                    return i, cv2.CAP_ANY
+            cap.release()
+        except:
+            continue
+    
+    return None, None
+
+# Initialize session state
+if 'webcam_on' not in st.session_state:
+    st.session_state.webcam_on = False
+if 'camera_found' not in st.session_state:
+    st.session_state.camera_found = False
+    # Try to find camera on startup
+    cam_idx, backend = find_working_camera()
+    if cam_idx is not None:
+        st.session_state.camera_index = cam_idx
+        st.session_state.camera_backend = backend
+        st.session_state.camera_found = True
