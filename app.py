@@ -368,56 +368,72 @@ with tab2:
             os.unlink(temp_file.name)
 
 with tab3:
-    st.markdown("<h2 class='sub-header'>Live Camera Filters</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 class='sub-header'>Webcam Filtering</h2>", unsafe_allow_html=True)
     
-    # Initialize webcam state if not exists
-    if 'webcam_active' not in st.session_state:
-        st.session_state.webcam_active = False
+    # Toggle webcam
+    if st.button("Toggle Webcam"):
+        st.session_state.webcam_on = not st.session_state.webcam_on
     
-    # Toggle webcam button
-    if st.button("🎥 Toggle Camera" if not st.session_state.webcam_active else "⏹️ Stop Camera"):
-        st.session_state.webcam_active = not st.session_state.webcam_active
-        st.rerun()
+    # Display webcam status
+    st.write(f"Webcam is {'ON' if st.session_state.webcam_on else 'OFF'}")
     
-    # Show status
-    st.write(f"Camera is {'ON' if st.session_state.webcam_active else 'OFF'}")
+    # Webcam frame placeholder
+    webcam_frame = st.empty()
     
-    if st.session_state.webcam_active:
-        # Create a placeholder for the webcam feed
-        webcam_placeholder = st.empty()
-        
+    # If webcam is on, capture and process frames
+    if st.session_state.webcam_on:
         try:
-            # Start webcam feed
-            webcam = st.camera_input("", key="webcam")
+            # Initialize webcam with different backends
+            cap = None
+            backends = [cv2.CAP_ANY]
             
-            if webcam is not None:
-                # Process the frame
-                image = Image.open(webcam)
-                image_np = np.array(image)
-                image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
-                
-                # Apply filters
-                processed_frame = process_frame(image_bgr)
-                processed_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-                
-                # Display processed frame
-                webcam_placeholder.image(processed_rgb, caption="Live Filter View", use_column_width=True)
-                
-                # Add snapshot button
-                if st.button("📸 Take Snapshot"):
-                    # Save the processed frame
-                    processed_bytes = cv2.imencode('.jpg', processed_frame)[1].tobytes()
-                    st.download_button(
-                        label="💾 Save Snapshot",
-                        data=processed_bytes,
-                        file_name="snapshot.jpg",
-                        mime="image/jpeg"
-                    )
+            if os.name == 'nt':  # Windows
+                backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
+            else:  # Linux/Mac
+                backends = [cv2.CAP_V4L2, cv2.CAP_ANY]
+            
+            # Try different backends
+            for backend in backends:
+                cap = cv2.VideoCapture(0, backend)
+                if cap.isOpened():
+                    ret, test_frame = cap.read()
+                    if ret and test_frame is not None:
+                        break
+                    cap.release()
+            
+            if not cap.isOpened():
+                st.error("Could not open webcam. Please check your camera connection.")
+            else:
+                # Process frames in real-time
+                while st.session_state.webcam_on:
+                    ret, frame = cap.read()
+                    
+                    if not ret:
+                        st.error("Failed to capture frame from webcam.")
+                        break
+                    
+                    # Process frame
+                    processed_frame = process_frame(frame)
+                    
+                    # Display side by side
+                    combined_frame = np.hstack((frame, processed_frame))
+                    
+                    # Convert to RGB for display
+                    combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
+                    
+                    # Display frame
+                    webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
+                    
+                    # Add a small delay to reduce CPU usage
+                    time.sleep(0.03)
         
         except Exception as e:
-            st.error("Camera error! Please check your camera connection and permissions.")
-            st.session_state.webcam_active = False
-            st.rerun()
+            st.error(f"Camera error: {str(e)}")
+        
+        finally:
+            # Release webcam when done
+            if 'cap' in locals() and cap is not None:
+                cap.release()
 
 # Footer
 st.markdown("---")
