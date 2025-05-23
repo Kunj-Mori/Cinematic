@@ -370,85 +370,130 @@ with tab2:
 with tab3:
     st.markdown("<h2 class='sub-header'>Webcam Filtering</h2>", unsafe_allow_html=True)
     
-    # Toggle webcam
-    if st.button("Toggle Webcam"):
-        st.session_state.webcam_on = not st.session_state.webcam_on
+    # Create two columns for camera options
+    col1, col2 = st.columns(2)
     
-    # Display webcam status
-    st.write(f"Webcam is {'ON' if st.session_state.webcam_on else 'OFF'}")
+    with col1:
+        # Toggle OpenCV webcam
+        if st.button("Try OpenCV Camera"):
+            st.session_state.webcam_on = not st.session_state.webcam_on
+            st.session_state.use_streamlit_camera = False
+    
+    with col2:
+        # Use Streamlit's camera input
+        st.write("Or use Streamlit's camera:")
+        camera_input = st.camera_input("Take a picture")
+        if camera_input is not None:
+            st.session_state.use_streamlit_camera = True
+            st.session_state.webcam_on = False
+    
+    # Display webcam status for OpenCV method
+    if st.session_state.webcam_on:
+        st.write("OpenCV Camera is ON")
     
     # Webcam frame placeholder
     webcam_frame = st.empty()
     
-    # If webcam is on, capture and process frames
-    if st.session_state.webcam_on:
+    # Handle Streamlit camera input
+    if camera_input is not None:
+        try:
+            # Read the image from the camera input
+            image = Image.open(camera_input)
+            image_np = np.array(image)
+            
+            # Convert RGB to BGR for OpenCV processing
+            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+            
+            # Process the frame
+            processed_frame = process_frame(image_bgr)
+            
+            # Display side by side
+            combined_frame = np.hstack((image_bgr, processed_frame))
+            combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
+            
+            # Display the result
+            st.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
+            
+            # Add download button for processed image
+            processed_bytes = cv2.imencode('.jpg', processed_frame)[1].tobytes()
+            st.download_button(
+                label="Download Processed Image",
+                data=processed_bytes,
+                file_name="processed_image.jpg",
+                mime="image/jpeg"
+            )
+        except Exception as e:
+            st.error(f"Error processing image: {str(e)}")
+    
+    # Handle OpenCV webcam
+    elif st.session_state.webcam_on:
         # Try different camera backends and indices
         camera_found = False
-        backends = [cv2.CAP_ANY]
-        if os.name == 'nt':  # Windows
-            backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
-        else:  # Linux/Mac
-            backends = [cv2.CAP_V4L2, cv2.CAP_ANY]
         
-        # Try different camera indices with different backends
-        for backend in backends:
-            for camera_index in range(3):  # Try indices 0, 1, 2
-                try:
-                    cap = cv2.VideoCapture(camera_index, backend)
+        try:
+            # First try default camera with default backend
+            cap = cv2.VideoCapture(0)
+            if cap.isOpened():
+                ret, test_frame = cap.read()
+                if ret and test_frame is not None:
+                    camera_found = True
+            else:
+                cap.release()
+                
+                # If default failed, try specific backends
+                backends = [cv2.CAP_ANY]
+                if os.name == 'nt':  # Windows
+                    backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF]
+                else:  # Linux/Mac
+                    backends = [cv2.CAP_V4L2]
+                
+                for backend in backends:
+                    cap = cv2.VideoCapture(0, backend)
                     if cap.isOpened():
-                        # Test if we can actually read from the camera
                         ret, test_frame = cap.read()
                         if ret and test_frame is not None:
                             camera_found = True
-                            st.success(f"Camera found! Using index {camera_index} with backend {backend}")
+                            st.success(f"Camera found with backend {backend}")
                             break
                         else:
                             cap.release()
-                except Exception as e:
-                    continue
-            if camera_found:
-                break
-        
-        if not camera_found:
-            st.error("Could not open webcam. Please check:")
-            st.write("- Camera is properly connected")
-            st.write("- Camera is not in use by another application")
-            st.write("- Camera permissions are granted")
-            st.write("- Try running: sudo modprobe v4l2loopback (for Linux)")
             
-            # Print OpenCV build information for debugging
-            st.write("OpenCV Build Information:")
-            build_info = cv2.getBuildInformation()
-            st.code(build_info)
-        else:
-            # Process frames in real-time
-            try:
-                while st.session_state.webcam_on:
-                    ret, frame = cap.read()
-                    
-                    if not ret:
-                        st.error("Failed to capture frame from webcam.")
-                        break
-                    
-                    # Process frame
-                    processed_frame = process_frame(frame)
-                    
-                    # Display side by side
-                    combined_frame = np.hstack((frame, processed_frame))
-                    
-                    # Convert to RGB for display
-                    combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
-                    
-                    # Display frame
-                    webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
-                    
-                    # Add a small delay to reduce CPU usage
-                    time.sleep(0.03)
-            except Exception as e:
-                st.error(f"Error during webcam capture: {str(e)}")
-            finally:
-                # Release webcam when done
-                cap.release()
+            if camera_found:
+                try:
+                    while st.session_state.webcam_on:
+                        ret, frame = cap.read()
+                        if not ret:
+                            st.error("Failed to capture frame")
+                            break
+                        
+                        # Process frame
+                        processed_frame = process_frame(frame)
+                        
+                        # Display side by side
+                        combined_frame = np.hstack((frame, processed_frame))
+                        combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
+                        
+                        # Display frame
+                        webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
+                        
+                        # Add a small delay
+                        time.sleep(0.03)
+                except Exception as e:
+                    st.error(f"Error during capture: {str(e)}")
+                finally:
+                    cap.release()
+            else:
+                st.error("Could not access camera. Please try:")
+                st.write("1. Using the Streamlit camera option above")
+                st.write("2. Checking if camera is connected and not in use")
+                st.write("3. Verifying camera permissions")
+                if os.name != 'nt':  # Linux/Mac
+                    st.write("4. Running: sudo modprobe v4l2loopback")
+                st.session_state.webcam_on = False
+        
+        except Exception as e:
+            st.error(f"Camera initialization error: {str(e)}")
+            st.session_state.webcam_on = False
 
 # Footer
 st.markdown("---")
