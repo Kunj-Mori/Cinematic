@@ -6,14 +6,6 @@ import tempfile
 import os
 import time
 
-# Add this function to check for cloud environment
-def is_cloud_environment():
-    return (
-        os.getenv('STREAMLIT_RUNTIME_ENV') == 'cloud' or
-        os.getenv('IS_CLOUD_ENVIRONMENT') == 'true' or
-        not os.path.exists('/dev/video0')  # Check if webcam device exists
-    )
-
 # Set page config
 st.set_page_config(
     page_title="Cinematic Filter App",
@@ -81,9 +73,28 @@ if 'original_image' not in st.session_state:
 if 'webcam_on' not in st.session_state:
     st.session_state.webcam_on = False
 
-# Initialize session state
-if 'is_cloud' not in st.session_state:
-    st.session_state.is_cloud = is_cloud_environment()
+# Filter parameters
+contrast = st.sidebar.slider("Contrast", 0.0, 2.0, st.session_state.contrast, 0.1)
+brightness = st.sidebar.slider("Brightness", 0.0, 2.0, st.session_state.brightness, 0.1)
+saturation = st.sidebar.slider("Saturation", 0.0, 2.0, st.session_state.saturation, 0.1)
+
+st.sidebar.markdown("### Tint")
+tint_r = st.sidebar.slider("Red Tint", 0.5, 1.5, st.session_state.tint_r, 0.05)
+tint_g = st.sidebar.slider("Green Tint", 0.5, 1.5, st.session_state.tint_g, 0.05)
+tint_b = st.sidebar.slider("Blue Tint", 0.5, 1.5, st.session_state.tint_b, 0.05)
+
+vignette = st.sidebar.slider("Vignette", 0.0, 1.0, st.session_state.vignette, 0.05)
+grain = st.sidebar.slider("Film Grain", 0.0, 1.0, st.session_state.grain, 0.05)
+
+# Update session state
+st.session_state.contrast = contrast
+st.session_state.brightness = brightness
+st.session_state.saturation = saturation
+st.session_state.tint_r = tint_r
+st.session_state.tint_g = tint_g
+st.session_state.tint_b = tint_b
+st.session_state.vignette = vignette
+st.session_state.grain = grain
 
 # Preset filters
 st.sidebar.markdown("## Preset Filters")
@@ -91,95 +102,36 @@ preset_options = {
     "None": {"contrast": 1.0, "brightness": 1.0, "saturation": 1.0, 
              "tint_r": 1.0, "tint_g": 1.0, "tint_b": 1.0, 
              "vignette": 0.0, "grain": 0.0},
-    "Cinematic Pro": {"contrast": 1.3, "brightness": 0.95, "saturation": 0.85, 
-                    "tint_r": 1.1, "tint_g": 0.95, "tint_b": 0.9, 
-                    "vignette": 0.35, "grain": 0.15},
-    "Hollywood": {"contrast": 1.25, "brightness": 0.9, "saturation": 0.8, 
-                "tint_r": 1.15, "tint_g": 0.9, "tint_b": 0.85, 
-                "vignette": 0.4, "grain": 0.2},
-    "Vintage Film": {"contrast": 1.1, "brightness": 1.05, "saturation": 0.7, 
-                   "tint_r": 1.2, "tint_g": 0.95, "tint_b": 0.8, 
-                   "vignette": 0.45, "grain": 0.25},
-    "Noir": {"contrast": 1.4, "brightness": 0.85, "saturation": 0.0, 
+    "Cinematic": {"contrast": 1.2, "brightness": 0.9, "saturation": 0.8, 
+                 "tint_r": 1.1, "tint_g": 0.9, "tint_b": 0.8, 
+                 "vignette": 0.4, "grain": 0.3},
+    "Vintage": {"contrast": 1.1, "brightness": 1.0, "saturation": 0.7, 
+               "tint_r": 1.2, "tint_g": 0.9, "tint_b": 0.7, 
+               "vignette": 0.5, "grain": 0.5},
+    "Noir": {"contrast": 1.4, "brightness": 0.8, "saturation": 0.0, 
             "tint_r": 1.0, "tint_g": 1.0, "tint_b": 1.0, 
-            "vignette": 0.6, "grain": 0.2},
-    "Warm Sunset": {"contrast": 1.15, "brightness": 1.1, "saturation": 1.2, 
-                  "tint_r": 1.25, "tint_g": 1.0, "tint_b": 0.8, 
-                  "vignette": 0.25, "grain": 0.1},
-    "Cool Morning": {"contrast": 1.1, "brightness": 1.05, "saturation": 0.9, 
-                   "tint_r": 0.85, "tint_g": 1.0, "tint_b": 1.15, 
-                   "vignette": 0.2, "grain": 0.1},
-    "Blockbuster": {"contrast": 1.35, "brightness": 0.95, "saturation": 1.1, 
-                  "tint_r": 1.05, "tint_g": 0.95, "tint_b": 1.1, 
-                  "vignette": 0.3, "grain": 0.15},
-    "Muted Tones": {"contrast": 1.1, "brightness": 0.95, "saturation": 0.75, 
-                  "tint_r": 1.0, "tint_g": 1.0, "tint_b": 1.0, 
-                  "vignette": 0.2, "grain": 0.1},
-    "Custom": {"contrast": 1.0, "brightness": 1.0, "saturation": 1.0, 
-             "tint_r": 1.0, "tint_g": 1.0, "tint_b": 1.0, 
-             "vignette": 0.0, "grain": 0.0}
+            "vignette": 0.7, "grain": 0.4},
+    "Warm": {"contrast": 1.1, "brightness": 1.1, "saturation": 1.2, 
+            "tint_r": 1.2, "tint_g": 1.0, "tint_b": 0.8, 
+            "vignette": 0.2, "grain": 0.1},
+    "Cool": {"contrast": 1.1, "brightness": 1.0, "saturation": 0.9, 
+            "tint_r": 0.8, "tint_g": 1.0, "tint_b": 1.2, 
+            "vignette": 0.2, "grain": 0.1}
 }
 
 selected_preset = st.sidebar.selectbox("Choose a preset", list(preset_options.keys()))
 
-# Show filter controls only when "Custom" is selected
-if selected_preset == "Custom":
-    st.sidebar.markdown("### Custom Filter Settings")
-else:
-    if st.sidebar.button("Apply Preset"):
-        preset = preset_options[selected_preset]
-        st.session_state.contrast = preset["contrast"]
-        st.session_state.brightness = preset["brightness"]
-        st.session_state.saturation = preset["saturation"]
-        st.session_state.tint_r = preset["tint_r"]
-        st.session_state.tint_g = preset["tint_g"]
-        st.session_state.tint_b = preset["tint_b"]
-        st.session_state.vignette = preset["vignette"]
-        st.session_state.grain = preset["grain"]
-        st.rerun()
-
-# Filter parameters - only show when Custom is selected or after a preset is applied
-if selected_preset == "Custom" or "contrast" in st.session_state:
-    contrast = st.sidebar.slider("Contrast", 0.0, 2.0, st.session_state.contrast, 0.1)
-    brightness = st.sidebar.slider("Brightness", 0.0, 2.0, st.session_state.brightness, 0.1)
-    saturation = st.sidebar.slider("Saturation", 0.0, 2.0, st.session_state.saturation, 0.1)
-
-    st.sidebar.markdown("### Tint")
-    tint_r = st.sidebar.slider("Red Tint", 0.5, 1.5, st.session_state.tint_r, 0.05)
-    tint_g = st.sidebar.slider("Green Tint", 0.5, 1.5, st.session_state.tint_g, 0.05)
-    tint_b = st.sidebar.slider("Blue Tint", 0.5, 1.5, st.session_state.tint_b, 0.05)
-
-    vignette = st.sidebar.slider("Vignette", 0.0, 1.0, st.session_state.vignette, 0.05)
-    grain = st.sidebar.slider("Film Grain", 0.0, 1.0, st.session_state.grain, 0.05)
-
-    # Update session state
-    st.session_state.contrast = contrast
-    st.session_state.brightness = brightness
-    st.session_state.saturation = saturation
-    st.session_state.tint_r = tint_r
-    st.session_state.tint_g = tint_g
-    st.session_state.tint_b = tint_b
-    st.session_state.vignette = vignette
-    st.session_state.grain = grain
-
-# Add preset description
-preset_descriptions = {
-    "None": "No filters applied - original image",
-    "Cinematic Pro": "Professional cinematic look with balanced contrast and subtle grain",
-    "Hollywood": "Classic Hollywood style with warm tones and medium contrast",
-    "Vintage Film": "Nostalgic film look with muted colors and authentic grain",
-    "Noir": "Classic black and white with strong contrast and dramatic vignette",
-    "Warm Sunset": "Warm, golden hour tones with enhanced reds",
-    "Cool Morning": "Cool, crisp tones perfect for morning scenes",
-    "Blockbuster": "High-impact look with strong contrast and vibrant colors",
-    "Muted Tones": "Subtle, understated look with slightly desaturated colors",
-    "Custom": "Create your own custom filter settings"
-}
-
-if selected_preset in preset_descriptions:
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Preset Description")
-    st.sidebar.markdown(f"*{preset_descriptions[selected_preset]}*")
+if st.sidebar.button("Apply Preset"):
+    preset = preset_options[selected_preset]
+    st.session_state.contrast = preset["contrast"]
+    st.session_state.brightness = preset["brightness"]
+    st.session_state.saturation = preset["saturation"]
+    st.session_state.tint_r = preset["tint_r"]
+    st.session_state.tint_g = preset["tint_g"]
+    st.session_state.tint_b = preset["tint_b"]
+    st.session_state.vignette = preset["vignette"]
+    st.session_state.grain = preset["grain"]
+    st.experimental_rerun()
 
 # Function to apply vignette effect
 def apply_vignette(image, amount):
@@ -208,24 +160,14 @@ def apply_grain(image, amount):
     if amount <= 0:
         return image
     
-    # Reduce grain intensity and make it more film-like
-    grain_intensity = amount * 25  # Reduced from 50 to 25 for subtler effect
+    grain_intensity = amount * 50  # Scale the grain intensity
     
-    # Create more natural-looking noise
-    noise = np.random.normal(0, 1, image.shape[:2])
-    # Apply Gaussian blur to make grain more natural
-    noise = cv2.GaussianBlur(noise, (3, 3), 0)
-    # Normalize noise
-    noise = (noise - noise.min()) / (noise.max() - noise.min())
-    noise = noise * grain_intensity
+    # Create noise
+    noise = np.random.normal(0, grain_intensity, image.shape[:2])
+    noise = np.repeat(noise[:, :, np.newaxis], 3, axis=2) if len(image.shape) == 3 else noise
     
-    # Add noise with proper channel handling
-    if len(image.shape) == 3:
-        noise = np.repeat(noise[:, :, np.newaxis], 3, axis=2)
-    
-    # Apply noise more naturally
-    grainy_image = image.astype(np.float32)
-    grainy_image = grainy_image * (1 - amount) + (grainy_image + noise) * amount
+    # Add noise to image
+    grainy_image = image.astype(np.float32) + noise[:, :, :3] if len(image.shape) == 3 else image.astype(np.float32) + noise
     grainy_image = np.clip(grainy_image, 0, 255).astype(np.uint8)
     
     return grainy_image
@@ -428,116 +370,50 @@ with tab2:
 with tab3:
     st.markdown("<h2 class='sub-header'>Webcam Filtering</h2>", unsafe_allow_html=True)
     
-    if not st.session_state.camera_found:
-        st.error("❌ No camera found! Please check your camera connection.")
-        st.info("💡 Make sure your camera is properly connected and not in use by another application.")
-    else:
-        col1, col2 = st.columns(2)
+    # Toggle webcam
+    if st.button("Toggle Webcam"):
+        st.session_state.webcam_on = not st.session_state.webcam_on
+    
+    # Display webcam status
+    st.write(f"Webcam is {'ON' if st.session_state.webcam_on else 'OFF'}")
+    
+    # Webcam frame placeholder
+    webcam_frame = st.empty()
+    
+    # If webcam is on, capture and process frames
+    if st.session_state.webcam_on:
+        # Initialize webcam
+        cap = cv2.VideoCapture(0)
         
-        with col1:
-            if not st.session_state.webcam_on:
-                if st.button("Start Webcam"):
-                    st.session_state.webcam_on = True
-                    st.rerun()
-        
-        with col2:
-            if st.session_state.webcam_on:
-                if st.button("Stop Webcam"):
-                    st.session_state.webcam_on = False
-                    st.rerun()
-        
-        # Display webcam status
-        st.write(f"Webcam is {'ON' if st.session_state.webcam_on else 'OFF'}")
-        
-        # Webcam frame placeholder
-        webcam_frame = st.empty()
-        
-        # If webcam is on, capture and process frames
-        if st.session_state.webcam_on:
-            cap = None
-            try:
-                # Initialize camera with detected backend
-                cap = cv2.VideoCapture(st.session_state.camera_index, st.session_state.camera_backend)
+        # Check if webcam is opened successfully
+        if not cap.isOpened():
+            st.error("Could not open webcam. Please check your camera connection.")
+        else:
+            # Process frames in real-time
+            while st.session_state.webcam_on:
+                ret, frame = cap.read()
                 
-                if not cap.isOpened():
-                    st.error("Failed to open camera. Please try again.")
-                    st.session_state.webcam_on = False
-                else:
-                    # Set camera properties for better performance
-                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                    cap.set(cv2.CAP_PROP_FPS, 30)
-                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                    
-                    frame_count = 0
-                    max_frames = 50  # Limit frames before refresh to prevent infinite loop
-                    
-                    while st.session_state.webcam_on and frame_count < max_frames:
-                        ret, frame = cap.read()
-                        if not ret:
-                            st.error("Failed to capture frame from webcam.")
-                            break
-                        
-                        # Process frame
-                        processed_frame = process_frame(frame)
-                        
-                        # Display side by side
-                        combined_frame = np.hstack((frame, processed_frame))
-                        
-                        # Convert to RGB for display
-                        combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
-                        
-                        # Display frame
-                        webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
-                        
-                        frame_count += 1
-                        time.sleep(0.03)  # ~30 FPS
-                    
-                    # Auto-refresh for continuous streaming
-                    if st.session_state.webcam_on:
-                        time.sleep(0.1)
-                        st.rerun()
-                        
-            except Exception as e:
-                st.error(f"Camera error: {str(e)}")
-                st.info("Try refreshing the page or check if another app is using the camera.")
-            finally:
-                st.session_state.webcam_on = False
-                if cap is not None:
-                    cap.release()
-        
-        # Add static camera capture option
-        st.write("---")
-        st.write("📸 Or capture a single photo:")
-        camera_file = st.camera_input("Take a picture")
-        
-        if camera_file is not None:
-            # Process the captured image
-            image = Image.open(camera_file)
-            image_np = np.array(image.convert("RGB"))
-            image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+                if not ret:
+                    st.error("Failed to capture frame from webcam.")
+                    break
+                
+                # Process frame
+                processed_frame = process_frame(frame)
+                
+                # Display side by side
+                combined_frame = np.hstack((frame, processed_frame))
+                
+                # Convert to RGB for display
+                combined_frame_rgb = cv2.cvtColor(combined_frame, cv2.COLOR_BGR2RGB)
+                
+                # Display frame
+                webcam_frame.image(combined_frame_rgb, caption="Original (Left) vs Processed (Right)", use_column_width=True)
+                
+                # Add a small delay to reduce CPU usage
+                time.sleep(0.03)
             
-            # Process frame
-            result = process_frame(image_bgr)
-            result_rgb = cv2.cvtColor(result, cv2.COLOR_BGR2RGB)
-            
-            # Display results
-            col1, col2 = st.columns(2)
-            with col1:
-                st.header("Original")
-                st.image(image_np)
-            with col2:
-                st.header("With Filter")
-                st.image(result_rgb)
-            
-            # Download button
-            processed_img = cv2.imencode('.jpg', result)[1].tobytes()
-            st.download_button(
-                label="Download Filtered Image",
-                data=processed_img,
-                file_name="filtered_photo.jpg",
-                mime="image/jpeg"
-            )
+            # Release webcam when done
+            cap.release()
 
 # Footer
 st.markdown("---")
@@ -554,54 +430,3 @@ st.markdown("""
 - Images: JPG, JPEG, PNG
 - Videos: MP4, AVI, MOV
 """)
-
-# Add this function after imports
-def find_working_camera():
-    """Find the first working camera"""
-    # Try common camera indices with different backends
-    backends_to_try = []
-    
-    if os.name == 'nt':  # Windows
-        backends_to_try = [cv2.CAP_DSHOW, cv2.CAP_MSMF]
-    else:  # Linux/Mac
-        backends_to_try = [cv2.CAP_V4L2, cv2.CAP_ANY]
-    
-    for backend in backends_to_try:
-        for i in range(5):  # Try indices 0-4
-            try:
-                cap = cv2.VideoCapture(i, backend)
-                if cap.isOpened():
-                    ret, frame = cap.read()
-                    if ret and frame is not None:
-                        cap.release()
-                        return i, backend
-                cap.release()
-            except:
-                continue
-    
-    # Fallback - try default method
-    for i in range(5):
-        try:
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                ret, frame = cap.read()
-                if ret and frame is not None:
-                    cap.release()
-                    return i, cv2.CAP_ANY
-            cap.release()
-        except:
-            continue
-    
-    return None, None
-
-# Initialize session state
-if 'webcam_on' not in st.session_state:
-    st.session_state.webcam_on = False
-if 'camera_found' not in st.session_state:
-    st.session_state.camera_found = False
-    # Try to find camera on startup
-    cam_idx, backend = find_working_camera()
-    if cam_idx is not None:
-        st.session_state.camera_index = cam_idx
-        st.session_state.camera_backend = backend
-        st.session_state.camera_found = True
