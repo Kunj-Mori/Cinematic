@@ -6,6 +6,14 @@ import tempfile
 import os
 import time
 
+# Add this function to check for cloud environment
+def is_cloud_environment():
+    return (
+        os.getenv('STREAMLIT_RUNTIME_ENV') == 'cloud' or
+        os.getenv('IS_CLOUD_ENVIRONMENT') == 'true' or
+        not os.path.exists('/dev/video0')  # Check if webcam device exists
+    )
+
 # Set page config
 st.set_page_config(
     page_title="Cinematic Filter App",
@@ -72,6 +80,10 @@ if 'original_image' not in st.session_state:
     st.session_state.original_image = None
 if 'webcam_on' not in st.session_state:
     st.session_state.webcam_on = False
+
+# Initialize session state
+if 'is_cloud' not in st.session_state:
+    st.session_state.is_cloud = is_cloud_environment()
 
 # Preset filters
 st.sidebar.markdown("## Preset Filters")
@@ -416,47 +428,51 @@ with tab2:
 with tab3:
     st.markdown("<h2 class='sub-header'>Webcam Filtering</h2>", unsafe_allow_html=True)
     
-    # Check if running on Streamlit Cloud
-    is_cloud = os.getenv('STREAMLIT_RUNTIME_ENV') == 'cloud'
-    
-    if is_cloud:
-        st.warning("⚠️ Webcam functionality is not available in cloud deployment. Please run the application locally to use the webcam features.")
-        st.info("💡 You can still use the Image and Video tabs to process your media!")
+    if st.session_state.is_cloud:
+        st.warning("⚠️ Webcam functionality is not available in cloud deployment.")
+        st.info("💡 Please use the Image or Video tabs instead, or run the application locally to use webcam features.")
+        st.markdown("""
+        ### Why isn't webcam available?
+        The webcam feature requires access to physical camera hardware, which isn't available in cloud deployments.
+        
+        To use the webcam feature:
+        1. Clone the repository locally
+        2. Install the requirements
+        3. Run the app using `streamlit run app.py`
+        """)
     else:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if not st.session_state.webcam_on:
-                if st.button("Start Webcam"):
-                    st.session_state.webcam_on = True
-                    st.rerun()
-        
-        with col2:
-            if st.session_state.webcam_on:
-                if st.button("Stop Webcam"):
-                    st.session_state.webcam_on = False
-                    st.rerun()
-        
-        # Display webcam status
-        st.write(f"Webcam is {'ON' if st.session_state.webcam_on else 'OFF'}")
-        
-        # Webcam frame placeholder
-        webcam_frame = st.empty()
-        
-        # If webcam is on, capture and process frames
-        if st.session_state.webcam_on:
-            try:
-                # Initialize webcam
-                cap = cv2.VideoCapture(0)
+        try:
+            # Test webcam availability before showing controls
+            test_cap = cv2.VideoCapture(0)
+            if test_cap.isOpened():
+                test_cap.release()
                 
-                # Check if webcam is opened successfully
-                if not cap.isOpened():
-                    st.error("Could not open webcam. Please check your camera connection.")
-                    st.session_state.webcam_on = False
-                    st.rerun()
-                else:
-                    while st.session_state.webcam_on:
-                        try:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if not st.session_state.webcam_on:
+                        if st.button("Start Webcam"):
+                            st.session_state.webcam_on = True
+                            st.rerun()
+                
+                with col2:
+                    if st.session_state.webcam_on:
+                        if st.button("Stop Webcam"):
+                            st.session_state.webcam_on = False
+                            st.rerun()
+                
+                # Display webcam status
+                st.write(f"Webcam is {'ON' if st.session_state.webcam_on else 'OFF'}")
+                
+                # Webcam frame placeholder
+                webcam_frame = st.empty()
+                
+                # If webcam is on, capture and process frames
+                if st.session_state.webcam_on:
+                    cap = None
+                    try:
+                        cap = cv2.VideoCapture(0)
+                        while st.session_state.webcam_on:
                             ret, frame = cap.read()
                             if not ret:
                                 st.error("Failed to capture frame from webcam.")
@@ -476,18 +492,19 @@ with tab3:
                             
                             # Add a small delay to reduce CPU usage
                             time.sleep(0.03)
-                        except Exception as e:
-                            st.error(f"Error processing frame: {str(e)}")
-                            break
-            except Exception as e:
-                st.error(f"Error initializing webcam: {str(e)}")
-            finally:
-                # Release webcam when done
-                try:
-                    cap.release()
-                except:
-                    pass
-                st.session_state.webcam_on = False
+                    except Exception as e:
+                        st.error(f"Error during webcam operation: {str(e)}")
+                    finally:
+                        st.session_state.webcam_on = False
+                        if cap is not None:
+                            cap.release()
+            else:
+                st.error("No webcam detected on this system.")
+                st.info("Please make sure a webcam is connected and properly configured.")
+        except Exception as e:
+            st.error("Failed to initialize webcam system.")
+            st.info("This might be due to missing drivers or hardware issues.")
+            print(f"Webcam initialization error: {str(e)}")  # For debugging
 
 # Footer
 st.markdown("---")
